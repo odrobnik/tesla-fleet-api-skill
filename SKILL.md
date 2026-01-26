@@ -18,7 +18,6 @@ Control Tesla vehicles via the official Fleet API.
 | `vehicles.py` | List vehicles + refresh cache |
 | `auth.py` | Authentication and configuration |
 | `tesla_oauth_local.py` | OAuth helper with local callback server |
-| `tesla_fleet.py` | Legacy compatibility wrapper (deprecated) |
 
 ---
 
