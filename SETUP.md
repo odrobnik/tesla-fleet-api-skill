@@ -28,9 +28,6 @@ Files:
 - `vehicles.json` — cached vehicle list
 - `places.json` — named locations (`{"home": {"lat": ..., "lon": ...}}`)
 
-Legacy:
-- If `tesla-fleet.json` exists, the scripts will **migrate** data into the new layout (and keep the legacy file intact).
-
 ---
 
 ## 1) Install + setup Tesla proxy (one-time)
