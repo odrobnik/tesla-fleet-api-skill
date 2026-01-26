@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 """Tesla Fleet API OAuth helper that runs a local callback server.
 
-- stdlib only
-- stores secrets/tokens in a JSON file OUTSIDE the skill folder
+Stdlib-only.
 
-Default secrets file:
-  /Users/oliver/clawd/secrets/tesla/tesla-fleet.json
+State layout (default dir: ~/.clawdbot/tesla-fleet-api):
+  - .env          provider creds / overrides (TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, ...)
+  - config.json   non-token configuration
+  - auth.json     OAuth tokens
 
 Typical flow:
-  1) configure client_id/client_secret/audience/scopes
+  1) put TESLA_CLIENT_ID / TESLA_CLIENT_SECRET into ~/.clawdbot/tesla-fleet-api/.env
   2) run this script; it prints an /authorize URL
-  3) you approve in browser; Tesla redirects to http://localhost:PORT/callback?code=...
-  4) the script captures the code and exchanges it for tokens, saving them
+  3) approve in browser; Tesla redirects to http://localhost:18080/callback?code=...
+  4) the script exchanges the code for tokens and saves them to auth.json
 
 Security:
-- Writes the JSON file with mode 600.
-- Avoid pasting secrets into chat; prefer local config.
+- Writes auth.json with mode 600.
+- Avoid pasting secrets into chat; prefer local .env.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import secrets
 import ssl
 import sys
@@ -32,38 +32,22 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, Optional, Tuple
 
+from store import (
+    default_dir,
+    ensure_migrated,
+    env as _env,
+    get_auth,
+    get_config,
+    load_env_file,
+    save_auth,
+    save_config,
+)
+
 TESLA_AUTHORIZE_URL = "https://auth.tesla.com/oauth2/v3/authorize"
 FLEET_AUTH_TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 
-DEFAULT_SECRETS_PATH = os.path.expanduser("~/.clawdbot/tesla-fleet-api/tesla-fleet.json")
 DEFAULT_AUDIENCE_EU = "https://fleet-api.prd.eu.vn.cloud.tesla.com"
-
-
-def _mkdirp(path: str) -> None:
-    os.makedirs(path, exist_ok=True)
-
-
-def read_json(path: str) -> Dict[str, Any]:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def write_json_private(path: str, obj: Dict[str, Any]) -> None:
-    parent = os.path.dirname(path)
-    if parent:
-        _mkdirp(parent)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=2, sort_keys=True)
-        f.write("\n")
-    try:
-        os.chmod(tmp, 0o600)
-    except Exception:
-        pass
-    os.replace(tmp, path)
+DEFAULT_REDIRECT_URI = "http://localhost:18080/callback"
 
 
 def form_post(url: str, fields: Dict[str, str]) -> Dict[str, Any]:
@@ -77,7 +61,8 @@ def form_post(url: str, fields: Dict[str, str]) -> Dict[str, Any]:
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(req) as resp:
+    ctx = ssl.create_default_context()
+    with urllib.request.urlopen(req, context=ctx) as resp:
         data = resp.read().decode("utf-8", errors="replace")
         return json.loads(data) if data else {}
 
@@ -120,7 +105,6 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.server._last_qs = qs  # type: ignore[attr-defined]
 
         code = (qs.get("code") or [None])[0]
-        state = (qs.get("state") or [None])[0]
         err = (qs.get("error") or [None])[0]
 
         self.send_response(200)
@@ -134,11 +118,9 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         else:
             self.wfile.write(b"No code received.\n")
 
-        # Stop the server after first callback.
         self.server._done = True  # type: ignore[attr-defined]
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        # Quiet by default.
         return
 
 
@@ -157,7 +139,6 @@ def run_callback_server(host: str, port: int, expect_path: str, timeout_s: int) 
             code = (qs.get("code") or [None])[0]
             state = (qs.get("state") or [None])[0]
             err = (qs.get("error") or [None])[0]
-            # If they hit a different path, still accept but warn.
             if expect_path and path != expect_path:
                 print(f"Warning: callback path was {path}, expected {expect_path}", file=sys.stderr)
             return code, state, err
@@ -168,13 +149,13 @@ def run_callback_server(host: str, port: int, expect_path: str, timeout_s: int) 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Tesla OAuth local callback helper")
-    ap.add_argument("--secrets", default=DEFAULT_SECRETS_PATH, help=f"Secrets JSON path (default: {DEFAULT_SECRETS_PATH})")
+    ap.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.clawdbot/tesla-fleet-api)")
 
     ap.add_argument("--client-id", help="Tesla app client_id")
     ap.add_argument("--client-secret", help="Tesla app client_secret")
-    ap.add_argument("--redirect-uri", default="http://localhost:18080/callback")
-    ap.add_argument("--audience", default=DEFAULT_AUDIENCE_EU)
-    ap.add_argument("--scope", default="openid offline_access vehicle_device_data vehicle_cmds")
+    ap.add_argument("--redirect-uri", default=None)
+    ap.add_argument("--audience", default=None)
+    ap.add_argument("--scope", default=None)
     ap.add_argument("--locale", default="en-US")
 
     ap.add_argument("--timeout", type=int, default=300, help="Seconds to wait for callback")
@@ -183,39 +164,42 @@ def main() -> int:
 
     args = ap.parse_args()
 
-    cfg = read_json(args.secrets)
+    load_env_file(args.dir)
+    ensure_migrated(args.dir)
 
-    client_id = args.client_id or cfg.get("client_id")
-    client_secret = args.client_secret or cfg.get("client_secret")
+    cfg = get_config(args.dir)
+
+    client_id = args.client_id or _env("TESLA_CLIENT_ID") or cfg.get("client_id")
+    client_secret = args.client_secret or _env("TESLA_CLIENT_SECRET") or cfg.get("client_secret")
+
+    redirect_uri = args.redirect_uri or cfg.get("redirect_uri") or _env("TESLA_REDIRECT_URI") or DEFAULT_REDIRECT_URI
+    audience = args.audience or cfg.get("audience") or _env("TESLA_AUDIENCE") or DEFAULT_AUDIENCE_EU
+    scope = args.scope or _env("TESLA_SCOPE") or cfg.get("scope") or "openid offline_access vehicle_device_data vehicle_cmds vehicle_location"
 
     if not client_id:
-        print("Missing client_id (pass --client-id or put it in secrets JSON).", file=sys.stderr)
+        print("Missing client_id (set TESLA_CLIENT_ID in .env or pass --client-id)", file=sys.stderr)
         return 2
     if not args.no_exchange and not client_secret:
-        print("Missing client_secret (pass --client-secret or put it in secrets JSON), or use --no-exchange.", file=sys.stderr)
+        print("Missing client_secret (set TESLA_CLIENT_SECRET in .env or pass --client-secret), or use --no-exchange.", file=sys.stderr)
         return 2
 
-    # Persist non-sensitive defaults too (handy for later scripts).
-    cfg["client_id"] = client_id
-    if client_secret:
-        cfg["client_secret"] = client_secret
-    cfg["redirect_uri"] = args.redirect_uri
-    cfg["audience"] = args.audience
-    cfg["scope"] = args.scope
-
-    write_json_private(args.secrets, cfg)
+    # Persist non-sensitive defaults.
+    cfg["redirect_uri"] = redirect_uri
+    cfg["audience"] = audience
+    cfg["scope"] = scope
+    save_config(args.dir, cfg)
 
     state = secrets.token_hex(16)
     url = build_authorize_url(
         client_id=client_id,
-        redirect_uri=args.redirect_uri,
-        scope=args.scope,
+        redirect_uri=redirect_uri,
+        scope=scope,
         state=state,
         locale=args.locale,
         prompt_missing_scopes=args.prompt_missing_scopes,
     )
 
-    host, port, path = parse_redirect_uri(args.redirect_uri)
+    host, port, path = parse_redirect_uri(redirect_uri)
 
     print("Open this URL in your browser:")
     print(url)
@@ -250,23 +234,20 @@ def main() -> int:
             "client_id": client_id,
             "client_secret": client_secret,
             "code": code,
-            "audience": args.audience,
-            "redirect_uri": args.redirect_uri,
+            "audience": audience,
+            "redirect_uri": redirect_uri,
         },
     )
 
-    # Save tokens (refresh token rotates later; always overwrite).
-    cfg["access_token"] = payload.get("access_token")
+    auth = get_auth(args.dir)
+    auth["access_token"] = payload.get("access_token")
     if payload.get("refresh_token"):
-        cfg["refresh_token"] = payload.get("refresh_token")
+        auth["refresh_token"] = payload.get("refresh_token")
+    save_auth(args.dir, {k: v for k, v in auth.items() if v is not None})
 
-    write_json_private(args.secrets, cfg)
-
-    # Don’t print tokens by default (avoid terminal scrollback leakage).
-    print("Exchanged code for tokens and saved to secrets JSON.")
-    print(f"Saved: {args.secrets}")
+    print("✅ Tokens saved (auth.json)")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

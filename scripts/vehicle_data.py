@@ -23,30 +23,10 @@ import urllib.request
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-DEFAULT_CONFIG_PATH = os.path.expanduser("~/.clawdbot/tesla-fleet-api/tesla-fleet.json")
+from store import default_dir, ensure_migrated, get_auth, get_config, get_vehicles, load_env_file, save_vehicles
+
+DEFAULT_DIR = default_dir()
 VEHICLE_CACHE_MAX_AGE = 86400  # 24 hours
-
-
-def load_config(path: str) -> Dict[str, Any]:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def save_config(path: str, cfg: Dict[str, Any]) -> None:
-    parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, sort_keys=True)
-    try:
-        os.chmod(tmp, 0o600)
-    except Exception:
-        pass
-    os.replace(tmp, path)
 
 
 def fetch_vehicles(base_url: str, token: str, ca_cert: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -57,42 +37,35 @@ def fetch_vehicles(base_url: str, token: str, ca_cert: Optional[str] = None) -> 
 
 
 def get_vehicles_cached(
-    cfg: Dict[str, Any],
-    config_path: str,
+    dir_path: str,
     base_url: str,
     token: str,
     ca_cert: Optional[str] = None,
     force_refresh: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Get vehicles from cache or fetch if stale."""
-    cache = cfg.get("vehicles_cache", {})
+    """Get vehicles from cache (vehicles.json) or fetch if stale."""
+    store = get_vehicles(dir_path)
+    cache = store.get("vehicles_cache", store)
     cached_at = cache.get("cached_at", 0)
     vehicles = cache.get("vehicles", [])
-    
-    # Check if cache is valid
+
     if not force_refresh and vehicles and (time.time() - cached_at) < VEHICLE_CACHE_MAX_AGE:
         return vehicles
-    
-    # Fetch fresh
+
     vehicles = fetch_vehicles(base_url, token, ca_cert)
-    
-    # Cache it (just vin and display_name)
-    cfg["vehicles_cache"] = {
+
+    cache = {
         "cached_at": int(time.time()),
-        "vehicles": [
-            {"vin": v.get("vin"), "display_name": v.get("display_name")}
-            for v in vehicles
-        ],
+        "vehicles": [{"vin": v.get("vin"), "display_name": v.get("display_name")} for v in vehicles],
     }
-    save_config(config_path, cfg)
-    
+    save_vehicles(dir_path, cache)
+
     return vehicles
 
 
 def resolve_vehicle(
     identifier: Optional[str],
-    cfg: Dict[str, Any],
-    config_path: str,
+    dir_path: str,
     base_url: str,
     token: str,
     ca_cert: Optional[str] = None,
@@ -105,7 +78,7 @@ def resolve_vehicle(
     
     Returns (vin, display_name) or exits with error.
     """
-    vehicles = get_vehicles_cached(cfg, config_path, base_url, token, ca_cert)
+    vehicles = get_vehicles_cached(dir_path, base_url, token, ca_cert)
     
     if not vehicles:
         print("No vehicles found on this account.", file=sys.stderr)
@@ -448,7 +421,7 @@ Examples:
     
     parser.add_argument("vehicle", metavar="VEHICLE", nargs="?", default=None,
                        help="Vehicle VIN or name (optional if only one vehicle)")
-    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="Config file path")
+    parser.add_argument("--dir", default=DEFAULT_DIR, help="Config directory (default: ~/.clawdbot/tesla-fleet-api)")
     parser.add_argument("--json", action="store_true", dest="raw_json", help="Output raw JSON")
     
     # Endpoint flags
@@ -462,18 +435,24 @@ Examples:
     
     args = parser.parse_args()
     
-    # Load config
-    cfg = load_config(args.config)
-    token = cfg.get("access_token")
-    base_url = cfg.get("base_url") or cfg.get("audience", "https://fleet-api.prd.eu.vn.cloud.tesla.com")
+    # Load state
+    dir_path = args.dir
+    load_env_file(dir_path)
+    ensure_migrated(dir_path)
+
+    cfg = get_config(dir_path)
+    auth = get_auth(dir_path)
+
+    token = auth.get("access_token")
+    base_url = cfg.get("base_url") or cfg.get("audience") or "https://fleet-api.prd.eu.vn.cloud.tesla.com"
     ca_cert = cfg.get("ca_cert")
-    
+
     if not token:
-        print("No access token found. Run tesla_fleet.py to authenticate.", file=sys.stderr)
+        print("No access token found. Run auth.py to authenticate.", file=sys.stderr)
         return 1
-    
+
     # Resolve vehicle (by VIN, name, or auto-select if single)
-    vin, display_name = resolve_vehicle(args.vehicle, cfg, args.config, base_url, token, ca_cert)
+    vin, display_name = resolve_vehicle(args.vehicle, dir_path, base_url, token, ca_cert)
     
     # Build endpoints list
     selected = []

@@ -24,35 +24,25 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
-DEFAULT_CONFIG_PATH = os.path.expanduser("~/.clawdbot/tesla-fleet-api/tesla-fleet.json")
+from store import (
+    default_dir,
+    ensure_migrated,
+    get_auth,
+    get_config,
+    get_places,
+    get_vehicles,
+    load_env_file,
+    save_places,
+    save_vehicles,
+)
+
+DEFAULT_DIR = default_dir()
 VEHICLE_CACHE_MAX_AGE = 86400  # 24 hours
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Config & HTTP helpers
+# HTTP helpers
 # ─────────────────────────────────────────────────────────────────────────────
-
-def load_config(path: str) -> Dict[str, Any]:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
-
-
-def save_config(path: str, cfg: Dict[str, Any]) -> None:
-    parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2, sort_keys=True)
-    try:
-        os.chmod(tmp, 0o600)
-    except Exception:
-        pass
-    os.replace(tmp, path)
-
 
 def http_json(
     method: str,
@@ -100,38 +90,37 @@ def fetch_vehicles(base_url: str, token: str, ca_cert: Optional[str] = None) -> 
 
 
 def get_vehicles_cached(
-    cfg: Dict[str, Any],
-    config_path: str,
+    dir_path: str,
     base_url: str,
     token: str,
     ca_cert: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    cache = cfg.get("vehicles_cache", {})
+    store = get_vehicles(dir_path)
+    cache = store.get("vehicles_cache", store)
     cached_at = cache.get("cached_at", 0)
     vehicles = cache.get("vehicles", [])
-    
+
     if vehicles and (time.time() - cached_at) < VEHICLE_CACHE_MAX_AGE:
         return vehicles
-    
+
     vehicles = fetch_vehicles(base_url, token, ca_cert)
-    cfg["vehicles_cache"] = {
+    cache = {
         "cached_at": int(time.time()),
         "vehicles": [{"vin": v.get("vin"), "display_name": v.get("display_name")} for v in vehicles],
     }
-    save_config(config_path, cfg)
-    return cfg["vehicles_cache"]["vehicles"]
+    save_vehicles(dir_path, cache)
+    return cache["vehicles"]
 
 
 def resolve_vehicle(
     identifier: Optional[str],
-    cfg: Dict[str, Any],
-    config_path: str,
+    dir_path: str,
     base_url: str,
     token: str,
     ca_cert: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Resolve vehicle identifier to (vin, display_name)."""
-    vehicles = get_vehicles_cached(cfg, config_path, base_url, token, ca_cert)
+    vehicles = get_vehicles_cached(dir_path, base_url, token, ca_cert)
     
     if not vehicles:
         print("No vehicles found.", file=sys.stderr)
@@ -292,7 +281,57 @@ def get_vehicle_location(base_url: str, token: str, vin: str, ca_cert: Optional[
     return None
 
 
-def cmd_precondition_add(args, base_url: str, token: str, vin: str, name: str, ca_cert: Optional[str]) -> int:
+def cmd_places_list(dir_path: str) -> int:
+    places = get_places(dir_path)
+    if not places:
+        print("(no places)")
+        return 0
+    for k in sorted(places.keys()):
+        v = places.get(k) or {}
+        lat = v.get("lat")
+        lon = v.get("lon")
+        print(f"{k}: {lat}, {lon}")
+    return 0
+
+
+def cmd_places_set(args, dir_path: str, base_url: str, token: Optional[str], vin: Optional[str], ca_cert: Optional[str]) -> int:
+    places = get_places(dir_path)
+
+    lat = args.lat
+    lon = args.lon
+
+    if args.here:
+        if not token or not vin:
+            print("--here requires an authenticated vehicle context (run auth first).", file=sys.stderr)
+            return 1
+        loc = get_vehicle_location(base_url, token, vin, ca_cert)
+        if not loc:
+            print("Could not fetch vehicle location. Wake vehicle or provide --lat/--lon.", file=sys.stderr)
+            return 1
+        lat, lon = loc
+
+    if lat is None or lon is None:
+        print("Specify --lat and --lon (or --here).", file=sys.stderr)
+        return 1
+
+    places[args.name] = {"lat": float(lat), "lon": float(lon)}
+    save_places(dir_path, places)
+    print(f"✅ Saved place '{args.name}': {float(lat)}, {float(lon)}")
+    return 0
+
+
+def cmd_places_remove(args, dir_path: str) -> int:
+    places = get_places(dir_path)
+    if args.name not in places:
+        print(f"No such place: {args.name}", file=sys.stderr)
+        return 1
+    places.pop(args.name, None)
+    save_places(dir_path, places)
+    print(f"✅ Removed place '{args.name}'")
+    return 0
+
+
+def cmd_precondition_add(args, dir_path: str, base_url: str, token: str, vin: str, name: str, ca_cert: Optional[str]) -> int:
     try:
         minutes = parse_time(args.time)
     except ValueError as e:
@@ -305,10 +344,26 @@ def cmd_precondition_add(args, base_url: str, token: str, vin: str, name: str, c
         print(str(e), file=sys.stderr)
         return 1
     
-    # Location: use provided or fetch from vehicle
+    # Location priority:
+    # 1) explicit --lat/--lon
+    # 2) --place <name> (from places.json)
+    # 3) fetch current vehicle location
     lat = args.lat
     lon = args.lon
-    
+
+    if (not lat or not lon) and getattr(args, "place", None):
+        places = get_places(dir_path)
+        p = places.get(args.place)
+        if not isinstance(p, dict):
+            print(
+                f"Unknown place '{args.place}'. Add it via: command.py places set {args.place} --lat X --lon Y",
+                file=sys.stderr,
+            )
+            return 1
+        lat = p.get("lat")
+        lon = p.get("lon")
+        print(f"Using place '{args.place}': {lat}, {lon}", file=sys.stderr)
+
     if not lat or not lon:
         print("Fetching vehicle location...", file=sys.stderr)
         loc = get_vehicle_location(base_url, token, vin, ca_cert)
@@ -316,7 +371,7 @@ def cmd_precondition_add(args, base_url: str, token: str, vin: str, name: str, c
             lat, lon = loc
             print(f"Using current location: {lat}, {lon}", file=sys.stderr)
         else:
-            print("Could not get vehicle location. Use --lat and --lon, or wake vehicle first.", file=sys.stderr)
+            print("Could not get vehicle location. Use --lat/--lon, set a --place, or wake vehicle first.", file=sys.stderr)
             return 1
     
     body = {
@@ -549,7 +604,7 @@ def cmd_simple(args, base_url: str, token: str, vin: str, name: str, ca_cert: Op
 # Argument parsing
 # ─────────────────────────────────────────────────────────────────────────────
 
-KNOWN_COMMANDS = {"climate", "precondition", "seat-heater", "seat-cooler", "seat-climate", "steering-heater", "charge", "honk", "flash", "lock", "unlock", "wake"}
+KNOWN_COMMANDS = {"climate", "precondition", "places", "seat-heater", "seat-cooler", "seat-climate", "steering-heater", "charge", "honk", "flash", "lock", "unlock", "wake"}
 
 
 def build_parser(vehicle: Optional[str] = None) -> argparse.ArgumentParser:
@@ -573,7 +628,7 @@ Examples:
 """
     )
     
-    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="Config file path")
+    parser.add_argument("--dir", default=DEFAULT_DIR, help="Config directory (default: ~/.clawdbot/tesla-fleet-api)")
     parser.add_argument("--json", action="store_true", dest="raw_json", help="Output raw JSON")
     parser.set_defaults(vehicle=vehicle)
     
@@ -597,8 +652,9 @@ Examples:
     p_precond_add = precond_sub.add_parser("add", help="Add or modify precondition schedule")
     p_precond_add.add_argument("--time", "-t", required=True, help="Departure time (HH:MM)")
     p_precond_add.add_argument("--days", "-d", default="all", help="Days: all, weekdays, weekends, or mon,tue,wed...")
-    p_precond_add.add_argument("--lat", help="Latitude (required)")
-    p_precond_add.add_argument("--lon", help="Longitude (required)")
+    p_precond_add.add_argument("--place", help="Named place from places.json")
+    p_precond_add.add_argument("--lat", help="Latitude (optional)")
+    p_precond_add.add_argument("--lon", help="Longitude (optional)")
     p_precond_add.add_argument("--id", help="Schedule ID (to modify existing)")
     p_precond_add.add_argument("--one-time", action="store_true", help="One-time schedule")
     p_precond_add.add_argument("--disabled", action="store_true", help="Create disabled schedule")
@@ -609,6 +665,21 @@ Examples:
     p_precond_list = precond_sub.add_parser("list", help="List precondition schedules")
     p_precond_list.add_argument("--json", action="store_true", dest="raw_json", help="Output raw JSON")
     
+    # places
+    p_places = subparsers.add_parser("places", help="Manage named places (lat/lon)")
+    places_sub = p_places.add_subparsers(dest="places_action", required=True)
+
+    places_sub.add_parser("list", help="List places")
+
+    p_place_set = places_sub.add_parser("set", help="Set a place")
+    p_place_set.add_argument("name", help="Place name")
+    p_place_set.add_argument("--lat", help="Latitude")
+    p_place_set.add_argument("--lon", help="Longitude")
+    p_place_set.add_argument("--here", action="store_true", help="Use current vehicle location")
+
+    p_place_rm = places_sub.add_parser("remove", help="Remove a place")
+    p_place_rm.add_argument("name", help="Place name")
+
     # seat-heater --level X --position Y
     p_seat_heater = subparsers.add_parser("seat-heater", help="Seat heater")
     p_seat_heater.add_argument("-l", "--level", required=True, help="Level: off, low, medium, high (or 0-3)")
@@ -655,7 +726,7 @@ def main() -> int:
     # Skip any leading flags
     idx = 0
     while idx < len(argv) and argv[idx].startswith("-"):
-        if argv[idx] in ("--config",):
+        if argv[idx] in ("--dir",):
             idx += 2  # skip flag and value
         else:
             idx += 1  # skip flag
@@ -680,28 +751,56 @@ def main() -> int:
     parser = build_parser(vehicle)
     args = parser.parse_args()
     
-    # Load config
-    cfg = load_config(args.config)
-    token = cfg.get("access_token")
-    base_url = cfg.get("base_url") or cfg.get("audience", "https://fleet-api.prd.eu.vn.cloud.tesla.com")
+    # Load state
+    dir_path = args.dir
+    load_env_file(dir_path)
+    ensure_migrated(dir_path)
+
+    cfg = get_config(dir_path)
+    auth = get_auth(dir_path)
+
+    token = auth.get("access_token")
+    audience = cfg.get("audience") or "https://fleet-api.prd.eu.vn.cloud.tesla.com"
+    base_url = cfg.get("base_url") or audience
     ca_cert = cfg.get("ca_cert")
-    
+
+    # Dispatch command
+    cmd = args.command
+
+    # Places commands can be used without auth (unless --here)
+    if cmd == "places":
+        try:
+            if args.places_action == "list":
+                return cmd_places_list(dir_path)
+            if args.places_action == "remove":
+                return cmd_places_remove(args, dir_path)
+            if args.places_action == "set":
+                vin = None
+                if args.here:
+                    if not token:
+                        print("No access token. Run auth.py to authenticate.", file=sys.stderr)
+                        return 1
+                    vin, _ = resolve_vehicle(args.vehicle, dir_path, base_url, token, ca_cert)
+                return cmd_places_set(args, dir_path, base_url, token, vin, ca_cert)
+            print("Unknown places action", file=sys.stderr)
+            return 1
+        except RuntimeError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
     if not token:
         print("No access token. Run auth.py to authenticate.", file=sys.stderr)
         return 1
-    
-    # Resolve vehicle
-    vin, name = resolve_vehicle(args.vehicle, cfg, args.config, base_url, token, ca_cert)
-    
-    # Dispatch command
-    cmd = args.command
+
+    # Resolve vehicle for all other commands
+    vin, name = resolve_vehicle(args.vehicle, dir_path, base_url, token, ca_cert)
     
     try:
         if cmd == "climate":
             return cmd_climate(args, base_url, token, vin, name, ca_cert)
         elif cmd == "precondition":
             if args.precondition_action == "add":
-                return cmd_precondition_add(args, base_url, token, vin, name, ca_cert)
+                return cmd_precondition_add(args, dir_path, base_url, token, vin, name, ca_cert)
             elif args.precondition_action == "remove":
                 return cmd_precondition_remove(args, base_url, token, vin, name, ca_cert)
             elif args.precondition_action == "list":

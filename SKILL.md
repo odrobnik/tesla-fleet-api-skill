@@ -1,6 +1,8 @@
 ---
 name: tesla-fleet-api
 description: Use when integrating with Tesla's official Fleet API to read vehicle/energy device data or issue remote commands (e.g. start HVAC preconditioning, wake vehicle, charge controls). Covers onboarding (developer app registration, regions/base URLs), OAuth token flows (third-party + partner tokens, refresh rotation), required domain/public-key hosting, and using Tesla's official vehicle-command/tesla-http-proxy for signed vehicle commands.
+version: 1.1.0
+metadata: {"clawdbot":{"requires":{"bins":["python3"]}}}
 ---
 
 # Tesla Fleet API
@@ -14,7 +16,7 @@ Control Tesla vehicles via the official Fleet API.
 | `command.py` | Vehicle commands (climate, charging, locks, etc.) |
 | `vehicle_data.py` | Read vehicle data (battery, climate, location, etc.) |
 | `auth.py` | Authentication and configuration |
-| `tesla_fleet.py` | Legacy monolithic script (deprecated) |
+| `tesla_fleet.py` | Legacy compatibility wrapper (deprecated) |
 
 ---
 
@@ -25,28 +27,35 @@ Control Tesla vehicles via the official Fleet API.
 cd skills/tesla-fleet-api
 ./scripts/setup_proxy.sh
 
-# 2. Configure credentials
-python3 scripts/auth.py config set \
-  --client-id "YOUR_CLIENT_ID" \
-  --client-secret "YOUR_CLIENT_SECRET" \
-  --redirect-uri "http://localhost:18080/callback"
+# 2. Put provider creds into ~/.clawdbot/tesla-fleet-api/.env
+# (analogous to Withings-family)
+cat > ~/.clawdbot/tesla-fleet-api/.env <<'EOF'
+TESLA_CLIENT_ID=YOUR_CLIENT_ID
+TESLA_CLIENT_SECRET=YOUR_CLIENT_SECRET
+EOF
+chmod 600 ~/.clawdbot/tesla-fleet-api/.env
 
-# 3. Login
+# 3. (Optional) configure non-secret settings
+python3 scripts/auth.py config set \
+  --redirect-uri "http://localhost:18080/callback" \
+  --audience "https://fleet-api.prd.eu.vn.cloud.tesla.com"
+
+# 4. Login
 python3 scripts/auth.py login
 
-# 4. Register domain & enroll virtual key
+# 5. Register domain & enroll virtual key
 python3 scripts/auth.py register --domain YOUR_DOMAIN.com
 # Then open: https://tesla.com/_ak/YOUR_DOMAIN.com
 
-# 5. Start proxy
+# 6. Start proxy
 ./scripts/start_proxy.sh ~/.clawdbot/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem
 
-# 6. Configure proxy
+# 7. Configure proxy
 python3 scripts/auth.py config set \
   --base-url "https://localhost:4443" \
   --ca-cert "$HOME/.clawdbot/tesla-fleet-api/proxy/tls-cert.pem"
 
-# 7. Test!
+# 8. Test!
 python3 scripts/vehicle_data.py -c
 python3 scripts/command.py honk
 ```
@@ -312,8 +321,8 @@ vehicle_data.py -c --json
 ### Sample Output
 
 ```
-🚗 Flash (online)
-   VIN: XP7YGCEK1SB731081
+🚗 My Tesla (online)
+   VIN: 5YJ... (redacted)
 
 ⚡ Charge State
 ────────────────────────────────────────
@@ -425,8 +434,8 @@ python3 scripts/tesla_fleet.py vehicles --json
 ### Sample Output
 
 ```
-🚗 Name:   Flash
-🔖 VIN:    XP7YGCEK1SB731081
+🚗 Name:   My Tesla
+🔖 VIN:    5YJ... (redacted)
 🟢 Status: Online
 👤 Access: Owner
 ```
@@ -435,7 +444,14 @@ python3 scripts/tesla_fleet.py vehicles --json
 
 ## Configuration
 
-Config file: `~/.clawdbot/tesla-fleet-api/tesla-fleet.json`
+Config directory: `~/.clawdbot/tesla-fleet-api/`
+
+Files:
+- `.env` (provider creds)
+- `config.json` (non-token config)
+- `auth.json` (tokens)
+- `vehicles.json` (vehicle cache)
+- `places.json` (named locations)
 
 ```json
 {
@@ -450,7 +466,7 @@ Config file: `~/.clawdbot/tesla-fleet-api/tesla-fleet.json`
   "refresh_token": "...",
   "vehicles_cache": {
     "cached_at": 1234567890,
-    "vehicles": [{"vin": "...", "display_name": "Flash"}]
+    "vehicles": [{"vin": "...", "display_name": "My Tesla"}]
   }
 }
 ```
@@ -528,7 +544,7 @@ auth.py refresh
 Specify vehicle by name or VIN:
 ```bash
 command.py flash climate start
-command.py XP7YGCEK1SB731081 honk
+command.py 5YJ... honk
 ```
 
 ---

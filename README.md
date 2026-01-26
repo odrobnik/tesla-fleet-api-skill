@@ -27,22 +27,23 @@ openssl ec -in private-key.pem -pubout -out public-key.pem
 # https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem
 ```
 
-### 3. OAuth + Register
+### 3. Provider creds + OAuth + Register
 
 ```bash
+# Put provider creds into ~/.clawdbot/tesla-fleet-api/.env
+cat > ~/.clawdbot/tesla-fleet-api/.env <<'EOF'
+TESLA_CLIENT_ID=YOUR_CLIENT_ID
+TESLA_CLIENT_SECRET=YOUR_CLIENT_SECRET
+EOF
+chmod 600 ~/.clawdbot/tesla-fleet-api/.env
+
 # Get tokens (opens browser, captures OAuth callback)
 python3 scripts/tesla_oauth_local.py \
-  --client-id "YOUR_CLIENT_ID" \
-  --client-secret "YOUR_CLIENT_SECRET" \
-  --redirect-uri "http://localhost:18080/callback" \
   --audience "https://fleet-api.prd.eu.vn.cloud.tesla.com" \
-  --scope "openid offline_access vehicle_device_data vehicle_cmds vehicle_location" \
   --prompt-missing-scopes
 
 # Register domain in EU region
-python3 scripts/tesla_fleet.py \
-  --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json \
-  register --domain YOUR_DOMAIN.com
+python3 scripts/auth.py register --domain YOUR_DOMAIN.com
 ```
 
 ### 4. Enroll Virtual Key
@@ -59,31 +60,31 @@ On your phone (Tesla app installed):
 ### 6. Configure to use proxy
 
 ```bash
-python3 scripts/tesla_fleet.py \
-  --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json \
-  config-set \
+python3 scripts/auth.py config set \
   --base-url "https://localhost:4443" \
-  --ca-cert "$HOME/.tesla-http-proxy/tls-cert.pem"
+  --ca-cert "$HOME/.clawdbot/tesla-fleet-api/proxy/tls-cert.pem"
 ```
 
 ### 7. Use it!
 
 ```bash
 # List vehicles
-python3 scripts/tesla_fleet.py --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json vehicles
+python3 scripts/vehicles.py
 
 # Get vehicle data
-python3 scripts/tesla_fleet.py --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json vehicle-data <VIN>
+python3 scripts/vehicle_data.py <VIN>
 
 # Honk horn
-python3 scripts/tesla_fleet.py --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json honk-horn <VIN>
+python3 scripts/command.py honk
 
 # Start climate
-python3 scripts/tesla_fleet.py --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json climate-start <VIN>
+python3 scripts/command.py climate start
 
 # Lock doors
-python3 scripts/tesla_fleet.py --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json door-lock <VIN>
+python3 scripts/command.py lock
 ```
+
+(You can also still use `scripts/tesla_fleet.py` as a deprecated compatibility wrapper.)
 
 ## Available Commands
 
@@ -128,7 +129,7 @@ Means signing is required:
 ### "vehicle unavailable"
 Vehicle is asleep. Wake it first:
 ```bash
-python3 scripts/tesla_fleet.py --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.json wake-up <VIN>
+python3 scripts/command.py wake
 ```
 
 ## Files
@@ -137,12 +138,17 @@ python3 scripts/tesla_fleet.py --config ~/.clawdbot/tesla-fleet-api/tesla-fleet.
 - `scripts/start_proxy.sh` — Start proxy in background
 - `scripts/stop_proxy.sh` — Stop proxy
 - `scripts/tesla_oauth_local.py` — OAuth helper with local callback server
-- `scripts/tesla_fleet.py` — Main CLI for all Tesla Fleet API operations
+- `scripts/auth.py` — Auth/config (reads creds from `~/.clawdbot/tesla-fleet-api/.env`)
+- `scripts/vehicles.py` — List vehicles + refresh cache
+- `scripts/vehicle_data.py` — Read vehicle data
+- `scripts/command.py` — Issue commands
+- `scripts/tesla_fleet.py` — Legacy compatibility wrapper (deprecated)
 
 ## Security Notes
 
 - **Never commit secrets** (`client_secret`, `access_token`, `private-key.pem`)
-- Tokens are stored in `~/.clawdbot/tesla-fleet-api/tesla-fleet.json` with mode `600`
+- Provider creds live in `~/.clawdbot/tesla-fleet-api/.env` (mode `600`)
+- Tokens are stored in `~/.clawdbot/tesla-fleet-api/auth.json` with mode `600`
 - Private key should be stored securely (not in skill folder)
 - The proxy runs locally only (`localhost:4443`)
 
