@@ -3,13 +3,13 @@
 
 Stdlib-only.
 
-State layout (default dir: ~/.clawdbot/tesla-fleet-api):
+State layout (default dir: ~/.moltbot/tesla-fleet-api):
   - .env          provider creds / overrides (TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, ...)
   - config.json   non-token configuration
   - auth.json     OAuth tokens
 
 Typical flow:
-  1) put TESLA_CLIENT_ID / TESLA_CLIENT_SECRET into ~/.clawdbot/tesla-fleet-api/.env
+  1) put TESLA_CLIENT_ID / TESLA_CLIENT_SECRET into ~/.moltbot/tesla-fleet-api/.env
   2) run this script; it prints an /authorize URL
   3) approve in browser; Tesla redirects to http://localhost:18080/callback?code=...
   4) the script exchanges the code for tokens and saves them to auth.json
@@ -149,7 +149,7 @@ def run_callback_server(host: str, port: int, expect_path: str, timeout_s: int) 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Tesla OAuth local callback helper")
-    ap.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.clawdbot/tesla-fleet-api)")
+    ap.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.moltbot/tesla-fleet-api)")
 
     ap.add_argument("--client-id", help="Tesla app client_id")
     ap.add_argument("--client-secret", help="Tesla app client_secret")

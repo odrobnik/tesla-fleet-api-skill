@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tesla Fleet API authentication and configuration.
 
-State layout (default dir: ~/.clawdbot/tesla-fleet-api):
+State layout (default dir: ~/.moltbot/tesla-fleet-api):
   - .env          provider creds / overrides (TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, ...)
   - config.json   non-token configuration
   - auth.json     OAuth tokens
@@ -120,7 +120,7 @@ def load_runtime(dir_path: str, *, args: argparse.Namespace) -> TeslaRuntime:
 
 def cmd_login(rt: TeslaRuntime, dir_path: str) -> int:
     if not rt.client_id:
-        print("Missing client_id (set TESLA_CLIENT_ID in ~/.clawdbot/tesla-fleet-api/.env)", file=sys.stderr)
+        print("Missing client_id (set TESLA_CLIENT_ID in ~/.moltbot/tesla-fleet-api/.env)", file=sys.stderr)
         return 1
 
     scope = "openid offline_access vehicle_device_data vehicle_cmds vehicle_location"
@@ -303,7 +303,7 @@ def cmd_config_set(args: argparse.Namespace, dir_path: str) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="auth.py", description="Tesla Fleet API auth/config")
-    p.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.clawdbot/tesla-fleet-api)")
+    p.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.moltbot/tesla-fleet-api)")
 
     # optional runtime overrides
     p.add_argument("--client-id")

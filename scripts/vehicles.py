@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """List Tesla vehicles and refresh local cache.
 
-State layout (default dir: ~/.clawdbot/tesla-fleet-api):
+State layout (default dir: ~/.moltbot/tesla-fleet-api):
   - config.json   non-token configuration
   - auth.json     OAuth tokens
   - vehicles.json cached vehicle list
@@ -84,7 +84,7 @@ def http_json(method: str, url: str, token: str, ca_cert: Optional[str] = None) 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="List Tesla vehicles")
-    ap.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.clawdbot/tesla-fleet-api)")
+    ap.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.moltbot/tesla-fleet-api)")
     ap.add_argument("--json", action="store_true", dest="raw_json", help="Output raw JSON")
     args = ap.parse_args()
 

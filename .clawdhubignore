@@ -1,5 +1,14 @@
+.git/
+.DS_Store
 __pycache__/
 *.pyc
 *.pyo
 *.log
-.DS_Store
+.env
+# GitHub-only docs
+README.md
+# Local secrets
+tokens-*.json
+auth.json
+config.json
+secrets/

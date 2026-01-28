@@ -2,7 +2,7 @@
 """Shared storage helpers for the Tesla Fleet API skill.
 
 We keep state in the user's home dir (outside the skill folder):
-  ~/.clawdbot/tesla-fleet-api/
+  ~/.moltbot/tesla-fleet-api/
 
 Files:
   - .env          (provider creds + overrides)
@@ -25,7 +25,7 @@ from typing import Any, Dict, Optional
 
 
 def default_dir() -> str:
-    return os.path.expanduser("~/.clawdbot/tesla-fleet-api")
+    return os.path.expanduser("~/.moltbot/tesla-fleet-api")
 
 
 def env_path(dir_path: str) -> str:
@@ -57,7 +57,7 @@ def _mkdirp(path: str) -> None:
 
 
 def load_env_file(dir_path: str) -> None:
-    """Load KEY=VALUE pairs from ~/.clawdbot/tesla-fleet-api/.env into os.environ.
+    """Load KEY=VALUE pairs from ~/.moltbot/tesla-fleet-api/.env into os.environ.
 
     - comments (# ...) and blank lines ignored
     - surrounding single/double quotes stripped

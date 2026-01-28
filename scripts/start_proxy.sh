@@ -3,7 +3,7 @@ set -e
 
 # Start tesla-http-proxy in background
 
-PROXY_DIR="${TESLA_PROXY_DIR:-$HOME/.clawdbot/tesla-fleet-api/proxy}"
+PROXY_DIR="${TESLA_PROXY_DIR:-$HOME/.moltbot/tesla-fleet-api/proxy}"
 GO_BIN="${HOME}/go/bin"
 PROXY_BIN="${GO_BIN}/tesla-http-proxy"
 PID_FILE="${PROXY_DIR}/proxy.pid"

@@ -421,7 +421,7 @@ Examples:
     
     parser.add_argument("vehicle", metavar="VEHICLE", nargs="?", default=None,
                        help="Vehicle VIN or name (optional if only one vehicle)")
-    parser.add_argument("--dir", default=DEFAULT_DIR, help="Config directory (default: ~/.clawdbot/tesla-fleet-api)")
+    parser.add_argument("--dir", default=DEFAULT_DIR, help="Config directory (default: ~/.moltbot/tesla-fleet-api)")
     parser.add_argument("--json", action="store_true", dest="raw_json", help="Output raw JSON")
     
     # Endpoint flags
