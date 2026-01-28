@@ -133,7 +133,7 @@ Configure the scripts to talk to the local proxy:
 ```bash
 python3 scripts/auth.py config set \
   --base-url "https://localhost:4443" \
-  --ca-cert "$HOME/.clawdbot/tesla-fleet-api/proxy/tls-cert.pem"
+  --ca-cert "$HOME/.moltbot/tesla-fleet-api/proxy/tls-cert.pem"
 ```
 
 ---
