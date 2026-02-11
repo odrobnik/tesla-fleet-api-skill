@@ -12,7 +12,15 @@ if [ -d "$OLD_DEFAULT" ] && [ ! -d "$NEW_DEFAULT" ]; then
   DEFAULT_PROXY_DIR="$OLD_DEFAULT"
 fi
 PROXY_DIR="${TESLA_PROXY_DIR:-$DEFAULT_PROXY_DIR}"
-GO_BIN="${HOME}/go/bin"
+GO_BIN="$(go env GOPATH 2>/dev/null)/bin"
+if [ -z "$GO_BIN" ] || [ "$GO_BIN" = "/bin" ]; then
+  GO_BIN="${HOME}/go/bin"
+fi
+
+# Pin vehicle-command version to reduce supply-chain risk.
+# Override only if you *explicitly* want a different version.
+TESLA_VEHICLE_COMMAND_VERSION_DEFAULT="v0.4.1"
+TESLA_VEHICLE_COMMAND_VERSION="${TESLA_VEHICLE_COMMAND_VERSION:-$TESLA_VEHICLE_COMMAND_VERSION_DEFAULT}"
 
 echo "==> Tesla Fleet API Proxy Setup"
 echo ""
@@ -35,21 +43,13 @@ if [ ! -f "${GO_BIN}/tesla-http-proxy" ]; then
     echo ""
     echo "==> Building tesla-http-proxy..."
     
-    # Clone vehicle-command repo to temp dir
-    TEMP_DIR="$(mktemp -d)"
-    trap "rm -rf ${TEMP_DIR}" EXIT
-    
-    git clone --depth 1 https://github.com/teslamotors/vehicle-command.git "${TEMP_DIR}/vehicle-command"
-    cd "${TEMP_DIR}/vehicle-command"
-    
-    # Build
-    go build -o tesla-http-proxy cmd/tesla-http-proxy/main.go
-    
-    # Install to ~/go/bin
+    # Prefer go install with a pinned version over an unpinned git clone.
+    # This uses the Go module checksum database to detect tampering/tag rewriting.
+    echo "Installing tesla-http-proxy from vehicle-command @ ${TESLA_VEHICLE_COMMAND_VERSION}"
+
     mkdir -p "${GO_BIN}"
-    mv tesla-http-proxy "${GO_BIN}/"
-    chmod +x "${GO_BIN}/tesla-http-proxy"
-    
+    GOBIN="${GO_BIN}" go install "github.com/teslamotors/vehicle-command/cmd/tesla-http-proxy@${TESLA_VEHICLE_COMMAND_VERSION}"
+
     echo "✓ Installed tesla-http-proxy to ${GO_BIN}/tesla-http-proxy"
 else
     echo "✓ tesla-http-proxy already installed"
