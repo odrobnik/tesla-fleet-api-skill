@@ -1,7 +1,7 @@
 ---
 name: tesla-fleet-api
 description: Use when integrating with Tesla's official Fleet API to read vehicle/energy device data or issue remote commands (e.g. start HVAC preconditioning, wake vehicle, charge controls). Covers onboarding (developer app registration, regions/base URLs), OAuth token flows (third-party + partner tokens, refresh rotation), required domain/public-key hosting, and using Tesla's official vehicle-command/tesla-http-proxy for signed vehicle commands.
-version: 1.1.4
+version: 1.1.5
 homepage: https://github.com/odrobnik/tesla-fleet-api-skill
 metadata:
   openclaw:
@@ -9,7 +9,7 @@ metadata:
     requires:
       bins: ["python3", "bash", "openssl", "git", "go"]
       env: ["TESLA_CLIENT_ID", "TESLA_CLIENT_SECRET"]
-      optionalEnv: ["TESLA_AUDIENCE", "TESLA_REDIRECT_URI", "TESLA_DOMAIN", "TESLA_BASE_URL", "TESLA_CA_CERT", "TESLA_ACCESS_TOKEN", "TESLA_REFRESH_TOKEN", "TESLA_SCOPE", "TESLA_PROXY_DIR", "TESLA_CONFIG_DIR"]
+      optionalEnv: ["TESLA_AUDIENCE", "TESLA_REDIRECT_URI", "TESLA_DOMAIN", "TESLA_BASE_URL", "TESLA_CA_CERT", "TESLA_ACCESS_TOKEN", "TESLA_REFRESH_TOKEN", "TESLA_SCOPE", "TESLA_PROXY_DIR", "TESLA_CONFIG_DIR", "TESLA_PRIVATE_KEY"]
 
 ---
 
@@ -40,6 +40,11 @@ State directory (default): `~/.moltbot/tesla-fleet-api/`
 - `config.json` (non-secret config)
 - `auth.json` (tokens)
 - proxy TLS material under `proxy/`
+- private key path is passed to `start_proxy.sh` (or via `TESLA_PRIVATE_KEY`)
+
+Security notes:
+- `scripts/setup_proxy.sh` clones & builds Tesla's `vehicle-command` repo from GitHub. If you want maximum assurance, audit/pin a specific revision before building.
+- Some helper scheduling scripts may read local calendar data (via `icalBuddy`) if you enable that feature.
 
 (It also covers proxy setup and key enrollment.)
 

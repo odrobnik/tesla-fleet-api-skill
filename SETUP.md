@@ -80,6 +80,7 @@ Optional overrides you *can* also set in `.env`:
 - `TESLA_DOMAIN`
 - `TESLA_BASE_URL`
 - `TESLA_CA_CERT`
+- `TESLA_PRIVATE_KEY` (path to your Tesla ECDSA private key used for signed commands via the local proxy)
 
 ---
 
