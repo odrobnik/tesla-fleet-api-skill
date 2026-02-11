@@ -41,7 +41,7 @@ cd skills/tesla-fleet-api
 ```
 
 This builds `tesla-http-proxy` and generates TLS material under:
-`~/.moltbot/tesla-fleet-api/proxy/`
+`~/.openclaw/tesla-fleet-api/proxy/` (legacy: `~/.moltbot/tesla-fleet-api/proxy/`)
 
 ---
 
@@ -57,21 +57,21 @@ openssl ec -in private-key.pem -pubout -out public-key.pem
 ```
 
 Store your private key securely (recommended location):
-`~/.moltbot/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem`
+`~/.openclaw/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem` (legacy: `~/.moltbot/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem`)
 
 ---
 
 ## 3) Put provider credentials into .env
 
 Create:
-`~/.moltbot/tesla-fleet-api/.env`
+`~/.openclaw/tesla-fleet-api/.env` (legacy: `~/.moltbot/tesla-fleet-api/.env`)
 
 ```bash
-cat > ~/.moltbot/tesla-fleet-api/.env <<'EOF'
+cat > ~/.openclaw/tesla-fleet-api/.env <<'EOF'
 TESLA_CLIENT_ID=YOUR_CLIENT_ID
 TESLA_CLIENT_SECRET=YOUR_CLIENT_SECRET
 EOF
-chmod 600 ~/.moltbot/tesla-fleet-api/.env
+chmod 600 ~/.openclaw/tesla-fleet-api/.env
 ```
 
 Optional overrides you *can* also set in `.env`:
@@ -127,7 +127,7 @@ Then, on your phone (Tesla app installed):
 Start the proxy:
 
 ```bash
-./scripts/start_proxy.sh ~/.moltbot/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem
+./scripts/start_proxy.sh ~/.openclaw/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem
 ```
 
 Configure the scripts to talk to the local proxy:
@@ -135,7 +135,7 @@ Configure the scripts to talk to the local proxy:
 ```bash
 python3 scripts/auth.py config set \
   --base-url "https://localhost:4443" \
-  --ca-cert "$HOME/.moltbot/tesla-fleet-api/proxy/tls-cert.pem"
+  --ca-cert "$HOME/.openclaw/tesla-fleet-api/proxy/tls-cert.pem"
 ```
 
 ---

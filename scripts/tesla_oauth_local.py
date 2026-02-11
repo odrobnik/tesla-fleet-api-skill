@@ -9,7 +9,7 @@ State layout (default dir: ~/.openclaw/tesla-fleet-api; legacy: ~/.moltbot/tesla
   - auth.json     OAuth tokens
 
 Typical flow:
-  1) put TESLA_CLIENT_ID / TESLA_CLIENT_SECRET into ~/.moltbot/tesla-fleet-api/.env
+  1) put TESLA_CLIENT_ID / TESLA_CLIENT_SECRET into ~/.openclaw/tesla-fleet-api/.env (legacy: ~/.moltbot/tesla-fleet-api/.env)
   2) run this script; it prints an /authorize URL
   3) approve in browser; Tesla redirects to http://localhost:18080/callback?code=...
   4) the script exchanges the code for tokens and saves them to auth.json

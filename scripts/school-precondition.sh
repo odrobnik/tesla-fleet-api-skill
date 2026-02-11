@@ -7,7 +7,7 @@
 #
 # Requires:
 # - icalBuddy
-# - Tesla Fleet API config at ~/.moltbot/tesla-fleet-api/tesla-fleet.json
+# - Tesla Fleet API config at ~/.openclaw/tesla-fleet-api/ (legacy: ~/.moltbot/tesla-fleet-api/)
 # - tesla-http-proxy (used when config base_url is https://localhost:4443)
 
 set -euo pipefail

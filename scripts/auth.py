@@ -303,7 +303,7 @@ def cmd_config_set(args: argparse.Namespace, dir_path: str) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="auth.py", description="Tesla Fleet API auth/config")
-    p.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.moltbot/tesla-fleet-api)")
+    p.add_argument("--dir", default=default_dir(), help="Config directory (default: ~/.openclaw/tesla-fleet-api)")
 
     # optional runtime overrides
     p.add_argument("--client-id")

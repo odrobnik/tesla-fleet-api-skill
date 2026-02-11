@@ -1,7 +1,7 @@
 ---
 name: tesla-fleet-api
 description: Use when integrating with Tesla's official Fleet API to read vehicle/energy device data or issue remote commands (e.g. start HVAC preconditioning, wake vehicle, charge controls). Covers onboarding (developer app registration, regions/base URLs), OAuth token flows (third-party + partner tokens, refresh rotation), required domain/public-key hosting, and using Tesla's official vehicle-command/tesla-http-proxy for signed vehicle commands.
-version: 1.1.6
+version: 1.1.7
 homepage: https://github.com/odrobnik/tesla-fleet-api-skill
 metadata:
   openclaw:
