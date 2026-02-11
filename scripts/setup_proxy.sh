@@ -13,13 +13,9 @@ echo ""
 
 # Check if Go is installed
 if ! command -v go &> /dev/null; then
-    echo "Go is not installed. Installing via Homebrew..."
-    if ! command -v brew &> /dev/null; then
-        echo "Error: Homebrew is required but not installed." >&2
-        echo "Visit: https://brew.sh" >&2
-        exit 1
-    fi
-    brew install go
+    echo "Error: Go is required to build tesla-http-proxy, but was not found." >&2
+    echo "Install Go and re-run this script. (On macOS: 'brew install go')" >&2
+    exit 1
 else
     echo "✓ Go is already installed: $(go version)"
 fi

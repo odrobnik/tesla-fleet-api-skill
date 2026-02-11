@@ -12,6 +12,7 @@ If you just want the CLI command reference, see `SKILL.md`.
 - A domain you control (for public key hosting + virtual key enrollment)
 - `python3`
 - macOS (scripts tested on macOS)
+- For proxy setup: `go`, `git`, `openssl` (and optionally Homebrew to install Go)
 
 ---
 
