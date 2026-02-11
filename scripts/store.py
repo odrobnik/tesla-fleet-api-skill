@@ -2,7 +2,7 @@
 """Shared storage helpers for the Tesla Fleet API skill.
 
 We keep state in the user's home dir (outside the skill folder):
-  ~/.moltbot/tesla-fleet-api/
+  ~/.openclaw/tesla-fleet-api/ (legacy: ~/.moltbot/tesla-fleet-api/)
 
 Files:
   - .env          (provider creds + overrides)
@@ -25,7 +25,17 @@ from typing import Any, Dict, Optional
 
 
 def default_dir() -> str:
-    return os.path.expanduser("~/.moltbot/tesla-fleet-api")
+    """Default state directory.
+
+    Prefer ~/.openclaw/tesla-fleet-api.
+    If a legacy ~/.moltbot/tesla-fleet-api exists and the new dir does not, keep using legacy.
+    """
+
+    new = os.path.expanduser("~/.openclaw/tesla-fleet-api")
+    legacy = os.path.expanduser("~/.moltbot/tesla-fleet-api")
+    if os.path.isdir(legacy) and not os.path.isdir(new):
+        return legacy
+    return new
 
 
 def env_path(dir_path: str) -> str:
@@ -57,7 +67,7 @@ def _mkdirp(path: str) -> None:
 
 
 def load_env_file(dir_path: str) -> None:
-    """Load KEY=VALUE pairs from ~/.moltbot/tesla-fleet-api/.env into os.environ.
+    """Load KEY=VALUE pairs from <state-dir>/.env into os.environ.
 
     - comments (# ...) and blank lines ignored
     - surrounding single/double quotes stripped

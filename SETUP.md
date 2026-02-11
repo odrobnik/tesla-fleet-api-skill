@@ -20,7 +20,7 @@ If you just want the CLI command reference, see `SKILL.md`.
 
 All runtime state lives outside the skill folder:
 
-`~/.moltbot/tesla-fleet-api/`
+`~/.openclaw/tesla-fleet-api/` (legacy: `~/.moltbot/tesla-fleet-api/`)
 
 Files:
 - `.env` — **provider creds** (client id/secret) and optional overrides

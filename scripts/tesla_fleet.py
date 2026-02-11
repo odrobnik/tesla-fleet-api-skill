@@ -19,6 +19,8 @@ import argparse
 import os
 import sys
 
+from store import default_dir
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -29,7 +31,7 @@ def _exec(script: str, argv: list[str]) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(add_help=False)
-    ap.add_argument("--dir", default=os.path.expanduser("~/.moltbot/tesla-fleet-api"))
+    ap.add_argument("--dir", default=default_dir())
     ap.add_argument("-h", "--help", action="store_true")
     ap.add_argument("cmd", nargs="?")
     ap.add_argument("rest", nargs=argparse.REMAINDER)

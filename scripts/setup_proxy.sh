@@ -5,7 +5,13 @@ set -e
 # This script installs Go (if needed), builds tesla-http-proxy, and generates TLS certs.
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PROXY_DIR="${TESLA_PROXY_DIR:-$HOME/.moltbot/tesla-fleet-api/proxy}"
+NEW_DEFAULT="$HOME/.openclaw/tesla-fleet-api/proxy"
+OLD_DEFAULT="$HOME/.moltbot/tesla-fleet-api/proxy"
+DEFAULT_PROXY_DIR="$NEW_DEFAULT"
+if [ -d "$OLD_DEFAULT" ] && [ ! -d "$NEW_DEFAULT" ]; then
+  DEFAULT_PROXY_DIR="$OLD_DEFAULT"
+fi
+PROXY_DIR="${TESLA_PROXY_DIR:-$DEFAULT_PROXY_DIR}"
 GO_BIN="${HOME}/go/bin"
 
 echo "==> Tesla Fleet API Proxy Setup"

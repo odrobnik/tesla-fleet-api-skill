@@ -18,7 +18,13 @@ SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"      # skills/tesla-fleet-api/scrip
 PYTHON_BIN="${PYTHON_BIN:-/opt/homebrew/bin/python3}"
 ICALBUDDY_BIN="${ICALBUDDY_BIN:-/opt/homebrew/bin/icalBuddy}"
 
-CONFIG_DIR="${TESLA_CONFIG_DIR:-$HOME/.moltbot/tesla-fleet-api}"
+NEW_DEFAULT="$HOME/.openclaw/tesla-fleet-api"
+OLD_DEFAULT="$HOME/.moltbot/tesla-fleet-api"
+DEFAULT_CONFIG_DIR="$NEW_DEFAULT"
+if [ -d "$OLD_DEFAULT" ] && [ ! -d "$NEW_DEFAULT" ]; then
+  DEFAULT_CONFIG_DIR="$OLD_DEFAULT"
+fi
+CONFIG_DIR="${TESLA_CONFIG_DIR:-$DEFAULT_CONFIG_DIR}"
 CONFIG_FILE="${CONFIG_DIR}/tesla-fleet.json"
 LOG_FILE="${CONFIG_DIR}/school-precondition.log"
 

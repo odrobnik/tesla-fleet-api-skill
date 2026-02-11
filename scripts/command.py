@@ -628,7 +628,7 @@ Examples:
 """
     )
     
-    parser.add_argument("--dir", default=DEFAULT_DIR, help="Config directory (default: ~/.moltbot/tesla-fleet-api)")
+    parser.add_argument("--dir", default=DEFAULT_DIR, help="Config directory (default: ~/.openclaw/tesla-fleet-api)")
     parser.add_argument("--json", action="store_true", dest="raw_json", help="Output raw JSON")
     parser.set_defaults(vehicle=vehicle)
     
