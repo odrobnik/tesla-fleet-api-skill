@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """Shared storage helpers for the Tesla Fleet API skill.
 
-We keep state in the user's home dir (outside the skill folder):
-  ~/.openclaw/tesla-fleet-api/ (legacy: ~/.moltbot/tesla-fleet-api/)
+State lives in the workspace: {workspace}/tesla-fleet-api/
 
 Files:
-  - .env          (provider creds + overrides)
-  - config.json   (non-token configuration)
+  - config.json   (configuration + provider creds)
   - auth.json     (OAuth tokens)
   - vehicles.json (cached vehicle list)
   - places.json   (named lat/lon places)
 
-We also support a legacy single-file layout:
-  - tesla-fleet.json
+Auth: set TESLA_CLIENT_ID / TESLA_CLIENT_SECRET in the environment,
+or put them in config.json (keys: "client_id", "client_secret").
 
 This module is stdlib-only and safe to import from any of the scripts.
 """
@@ -24,22 +22,51 @@ import os
 from typing import Any, Dict, Optional
 
 
-def default_dir() -> str:
-    """Default state directory.
+def _find_workspace_root() -> str:
+    """Resolve the OpenClaw workspace root.
 
-    Prefer ~/.openclaw/tesla-fleet-api.
-    If a legacy ~/.moltbot/tesla-fleet-api exists and the new dir does not, keep using legacy.
+    Priority: OPENCLAW_WORKSPACE env → walk up from __file__ looking for
+    SOUL.md / AGENTS.md → fallback to ~/.openclaw.
     """
+    env_ws = os.environ.get("OPENCLAW_WORKSPACE")
+    if env_ws and os.path.isdir(env_ws):
+        return env_ws
 
-    new = os.path.expanduser("~/.openclaw/tesla-fleet-api")
-    legacy = os.path.expanduser("~/.moltbot/tesla-fleet-api")
-    if os.path.isdir(legacy) and not os.path.isdir(new):
-        return legacy
-    return new
+    # Walk up from CWD
+    cwd = os.getcwd()
+    d = cwd
+    for _ in range(10):
+        if os.path.exists(os.path.join(d, "SOUL.md")) or os.path.exists(
+            os.path.join(d, "AGENTS.md")
+        ):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+
+    # Walk up from this script's location (follows symlinks)
+    d = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(10):
+        if os.path.exists(os.path.join(d, "SOUL.md")) or os.path.exists(
+            os.path.join(d, "AGENTS.md")
+        ):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+
+    return os.path.expanduser("~/.openclaw")
 
 
-def env_path(dir_path: str) -> str:
-    return os.path.join(dir_path, ".env")
+def default_dir() -> str:
+    """Default state directory: {workspace}/tesla-fleet-api/.
+
+    Falls back to ~/.openclaw/tesla-fleet-api if workspace detection fails.
+    """
+    ws = _find_workspace_root()
+    return os.path.join(ws, "tesla-fleet-api")
 
 
 def config_path(dir_path: str) -> str:
@@ -58,40 +85,30 @@ def places_path(dir_path: str) -> str:
     return os.path.join(dir_path, "places.json")
 
 
-def legacy_path(dir_path: str) -> str:
-    return os.path.join(dir_path, "tesla-fleet.json")
-
-
 def _mkdirp(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
 def load_env_file(dir_path: str) -> None:
-    """Load KEY=VALUE pairs from <state-dir>/.env into os.environ.
+    """Load provider creds from config.json into os.environ.
 
-    - comments (# ...) and blank lines ignored
-    - surrounding single/double quotes stripped
-    - existing env vars are NOT overwritten
+    Maps config.json keys to environment variables:
+      client_id       -> TESLA_CLIENT_ID
+      client_secret   -> TESLA_CLIENT_SECRET
+      audience        -> TESLA_AUDIENCE
+
+    Existing env vars are NOT overwritten.
     """
-
-    p = env_path(dir_path)
-    if not os.path.exists(p):
-        return
-
-    try:
-        with open(p, "r", encoding="utf-8") as f:
-            for line in f.read().splitlines():
-                s = line.strip()
-                if not s or s.startswith("#") or "=" not in s:
-                    continue
-                k, v = s.split("=", 1)
-                k = k.strip()
-                v = v.strip().strip('"\'')
-                if k and k not in os.environ:
-                    os.environ[k] = v
-    except Exception:
-        # Don't hard-fail on env loading.
-        return
+    cfg = get_config(dir_path)
+    _env_map = {
+        "client_id": "TESLA_CLIENT_ID",
+        "client_secret": "TESLA_CLIENT_SECRET",
+        "audience": "TESLA_AUDIENCE",
+    }
+    for cfg_key, env_key in _env_map.items():
+        val = cfg.get(cfg_key)
+        if val and env_key not in os.environ:
+            os.environ[env_key] = str(val)
 
 
 def read_json(path: str) -> Dict[str, Any]:
@@ -115,53 +132,6 @@ def write_json_private(path: str, obj: Dict[str, Any]) -> None:
     except Exception:
         pass
     os.replace(tmp, path)
-
-
-def ensure_migrated(dir_path: str) -> None:
-    """If legacy tesla-fleet.json exists, split it into the new multi-file layout.
-
-    This is best-effort and non-destructive:
-    - creates missing new files
-    - does NOT delete legacy file
-    """
-
-    legacy = legacy_path(dir_path)
-    if not os.path.exists(legacy):
-        return
-
-    cfg_p = config_path(dir_path)
-    auth_p = auth_path(dir_path)
-    veh_p = vehicles_path(dir_path)
-    plc_p = places_path(dir_path)
-
-    raw = read_json(legacy)
-
-    if not os.path.exists(cfg_p):
-        cfg: Dict[str, Any] = {}
-        for k in ("audience", "base_url", "ca_cert", "redirect_uri", "domain"):
-            if raw.get(k) is not None:
-                cfg[k] = raw.get(k)
-        write_json_private(cfg_p, cfg)
-
-    if not os.path.exists(auth_p):
-        auth: Dict[str, Any] = {}
-        for k in ("access_token", "refresh_token", "partner_access_token", "partner_refresh_token"):
-            if raw.get(k) is not None:
-                auth[k] = raw.get(k)
-        write_json_private(auth_p, auth)
-
-    if not os.path.exists(veh_p):
-        if raw.get("vehicles_cache") is not None:
-            # store vehicles cache directly in vehicles.json
-            write_json_private(veh_p, raw.get("vehicles_cache"))
-
-    if not os.path.exists(plc_p):
-        home_lat = raw.get("home_lat")
-        home_lon = raw.get("home_lon")
-        if home_lat is not None and home_lon is not None:
-            # store places as a name -> {lat, lon} mapping
-            places = {"home": {"lat": float(home_lat), "lon": float(home_lon)}}
-            write_json_private(plc_p, places)
 
 
 def get_config(dir_path: str) -> Dict[str, Any]:

@@ -4,19 +4,19 @@
 Stdlib-only.
 
 State layout (default dir: ~/.openclaw/tesla-fleet-api; legacy: ~/.moltbot/tesla-fleet-api):
-  - .env          provider creds / overrides (TESLA_CLIENT_ID, TESLA_CLIENT_SECRET, ...)
+  - config.json   provider creds (client_id, client_secret) + config
   - config.json   non-token configuration
   - auth.json     OAuth tokens
 
 Typical flow:
-  1) put TESLA_CLIENT_ID / TESLA_CLIENT_SECRET into ~/.openclaw/tesla-fleet-api/.env (legacy: ~/.moltbot/tesla-fleet-api/.env)
+  1) set TESLA_CLIENT_ID / TESLA_CLIENT_SECRET in environment or config.json
   2) run this script; it prints an /authorize URL
   3) approve in browser; Tesla redirects to http://localhost:18080/callback?code=...
   4) the script exchanges the code for tokens and saves them to auth.json
 
 Security:
 - Writes auth.json with mode 600.
-- Avoid pasting secrets into chat; prefer local .env.
+- Avoid pasting secrets into chat; prefer config.json or environment variables.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from store import (
     default_dir,
-    ensure_migrated,
+
     env as _env,
     get_auth,
     get_config,
@@ -165,7 +165,6 @@ def main() -> int:
     args = ap.parse_args()
 
     load_env_file(args.dir)
-    ensure_migrated(args.dir)
 
     cfg = get_config(args.dir)
 
@@ -177,10 +176,10 @@ def main() -> int:
     scope = args.scope or _env("TESLA_SCOPE") or cfg.get("scope") or "openid offline_access vehicle_device_data vehicle_cmds vehicle_location"
 
     if not client_id:
-        print("Missing client_id (set TESLA_CLIENT_ID in .env or pass --client-id)", file=sys.stderr)
+        print("Missing client_id (set TESLA_CLIENT_ID in environment/config.json or pass --client-id)", file=sys.stderr)
         return 2
     if not args.no_exchange and not client_secret:
-        print("Missing client_secret (set TESLA_CLIENT_SECRET in .env or pass --client-secret), or use --no-exchange.", file=sys.stderr)
+        print("Missing client_secret (set TESLA_CLIENT_SECRET in environment/config.json or pass --client-secret), or use --no-exchange.", file=sys.stderr)
         return 2
 
     # Persist non-sensitive defaults.

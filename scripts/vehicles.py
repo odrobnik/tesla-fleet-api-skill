@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import ssl
 import sys
 import time
@@ -22,7 +23,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-from store import default_dir, ensure_migrated, get_auth, get_config, load_env_file, save_auth, save_vehicles, env as _env
+from store import default_dir, get_auth, get_config, load_env_file, save_auth, save_vehicles, env as _env
 
 FLEET_AUTH_TOKEN_URL = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token"
 
@@ -89,7 +90,6 @@ def main() -> int:
     args = ap.parse_args()
 
     load_env_file(args.dir)
-    ensure_migrated(args.dir)
 
     cfg = get_config(args.dir)
     auth = get_auth(args.dir)
@@ -101,6 +101,8 @@ def main() -> int:
 
     base_url = (cfg.get("base_url") or cfg.get("audience") or "https://fleet-api.prd.eu.vn.cloud.tesla.com").rstrip("/")
     ca_cert = cfg.get("ca_cert")
+    if ca_cert and not os.path.isabs(ca_cert):
+        ca_cert = os.path.join(args.dir, ca_cert)
 
     try:
         data = http_json("GET", f"{base_url}/api/1/vehicles", token, ca_cert=ca_cert)

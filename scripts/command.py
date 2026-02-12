@@ -26,7 +26,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from store import (
     default_dir,
-    ensure_migrated,
     get_auth,
     get_config,
     get_places,
@@ -754,7 +753,6 @@ def main() -> int:
     # Load state
     dir_path = args.dir
     load_env_file(dir_path)
-    ensure_migrated(dir_path)
 
     cfg = get_config(dir_path)
     auth = get_auth(dir_path)
@@ -763,6 +761,8 @@ def main() -> int:
     audience = cfg.get("audience") or "https://fleet-api.prd.eu.vn.cloud.tesla.com"
     base_url = cfg.get("base_url") or audience
     ca_cert = cfg.get("ca_cert")
+    if ca_cert and not os.path.isabs(ca_cert):
+        ca_cert = os.path.join(dir_path, ca_cert)
 
     # Dispatch command
     cmd = args.command

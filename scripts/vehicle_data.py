@@ -23,7 +23,7 @@ import urllib.request
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from store import default_dir, ensure_migrated, get_auth, get_config, get_vehicles, load_env_file, save_vehicles
+from store import default_dir, get_auth, get_config, get_vehicles, load_env_file, save_vehicles
 
 DEFAULT_DIR = default_dir()
 VEHICLE_CACHE_MAX_AGE = 86400  # 24 hours
@@ -438,7 +438,6 @@ Examples:
     # Load state
     dir_path = args.dir
     load_env_file(dir_path)
-    ensure_migrated(dir_path)
 
     cfg = get_config(dir_path)
     auth = get_auth(dir_path)
@@ -446,6 +445,8 @@ Examples:
     token = auth.get("access_token")
     base_url = cfg.get("base_url") or cfg.get("audience") or "https://fleet-api.prd.eu.vn.cloud.tesla.com"
     ca_cert = cfg.get("ca_cert")
+    if ca_cert and not os.path.isabs(ca_cert):
+        ca_cert = os.path.join(dir_path, ca_cert)
 
     if not token:
         print("No access token found. Run auth.py to authenticate.", file=sys.stderr)
