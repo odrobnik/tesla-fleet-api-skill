@@ -34,13 +34,16 @@ if [ ! -f "${PROXY_BIN}" ]; then
     exit 1
 fi
 
-# --- Check TLS certs exist ---
+# --- Generate TLS certs if missing ---
+mkdir -p "${PROXY_DIR}"
 if [ ! -f "${PROXY_DIR}/tls-cert.pem" ] || [ ! -f "${PROXY_DIR}/tls-key.pem" ]; then
-    echo "Error: TLS certificates not found in ${PROXY_DIR}" >&2
-    echo "" >&2
-    echo "Generate them by following the Proxy Setup section in:" >&2
-    echo "  ${SKILL_DIR}/SETUP.md" >&2
-    exit 1
+    echo "Generating self-signed TLS certificate for localhost..."
+    openssl req -x509 -newkey rsa:4096 \
+        -keyout "${PROXY_DIR}/tls-key.pem" \
+        -out "${PROXY_DIR}/tls-cert.pem" \
+        -days 365 -nodes -subj "/CN=localhost" > /dev/null 2>&1
+    chmod 600 "${PROXY_DIR}/tls-key.pem"
+    echo "✓ Generated TLS certificates in ${PROXY_DIR}"
 fi
 
 # --- Resolve private key ---
