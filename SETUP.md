@@ -118,17 +118,6 @@ openssl req -x509 -newkey rsa:4096 \
 chmod 600 tls-key.pem
 ```
 
-### Start the proxy
-
-```bash
-~/go/bin/tesla-http-proxy \
-  -key-file {workspace}/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem \
-  -tls-key {workspace}/tesla-fleet-api/proxy/tls-key.pem \
-  -cert {workspace}/tesla-fleet-api/proxy/tls-cert.pem \
-  -host localhost \
-  -port 4443
-```
-
 ### Configure scripts to use the proxy
 
 ```bash
@@ -139,9 +128,20 @@ python3 scripts/auth.py config set \
 
 The `ca_cert` path is stored relative to the config directory and resolved at runtime.
 
-### Stop the proxy
+### Start / stop the proxy
 
-Just kill the process (`Ctrl+C` or `kill <pid>`).
+Use the convenience scripts:
+
+```bash
+# Start (auto-detects private key in workspace, or pass path explicitly)
+./scripts/start_proxy.sh
+./scripts/start_proxy.sh /path/to/private-key.pem
+
+# Stop
+./scripts/stop_proxy.sh
+```
+
+The proxy runs in the background on `https://localhost:4443`. Logs go to `{workspace}/tesla-fleet-api/proxy/proxy.log`.
 
 ---
 
