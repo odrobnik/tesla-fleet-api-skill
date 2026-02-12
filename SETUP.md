@@ -12,40 +12,29 @@ If you just want the CLI command reference, see `SKILL.md`.
 - A domain you control (for public key hosting + virtual key enrollment)
 - `python3`
 - macOS (scripts tested on macOS)
-- For proxy setup: `go`, `git`, `openssl` (and optionally Homebrew to install Go)
+- For proxy setup: `go` and `openssl` (on macOS: `brew install go`)
 
 ---
 
 ## State / Files
 
-All runtime state lives outside the skill folder:
+All runtime state lives in your workspace:
 
-`~/.openclaw/tesla-fleet-api/` (legacy: `~/.moltbot/tesla-fleet-api/`)
+`{workspace}/tesla-fleet-api/`
 
 Files:
-- `.env` — **provider creds** (client id/secret) and optional overrides
-- `config.json` — non-token config (audience/base_url/ca_cert/redirect_uri/domain)
+- `config.json` — provider creds (client id/secret), non-token config (audience, base_url, ca_cert, redirect_uri, domain)
 - `auth.json` — tokens (access/refresh)
 - `vehicles.json` — cached vehicle list
 - `places.json` — named locations (`{"home": {"lat": ..., "lon": ...}}`)
+- `proxy/` — TLS material for the signing proxy
+- `*.tesla.private-key.pem` — your Tesla EC private key
+
+Credentials come from `config.json` or environment variables (`TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`). No `.env` file loading.
 
 ---
 
-## 1) Install + setup Tesla proxy (one-time)
-
-Some commands require Tesla’s end-to-end signing via the local proxy.
-
-```bash
-cd skills/tesla-fleet-api
-./scripts/setup_proxy.sh
-```
-
-This builds `tesla-http-proxy` and generates TLS material under:
-`~/.openclaw/tesla-fleet-api/proxy/` (legacy: `~/.moltbot/tesla-fleet-api/proxy/`)
-
----
-
-## 2) Create & host your EC keypair
+## 1) Create & host your EC keypair
 
 ```bash
 # Generate P-256 keypair
@@ -56,45 +45,26 @@ openssl ec -in private-key.pem -pubout -out public-key.pem
 # https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem
 ```
 
-Store your private key securely (recommended location):
-`~/.openclaw/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem` (legacy: `~/.moltbot/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem`)
+Store your private key in the workspace:
+`{workspace}/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem`
 
 ---
 
-## 3) Put provider credentials into .env
-
-Create:
-`~/.openclaw/tesla-fleet-api/.env` (legacy: `~/.moltbot/tesla-fleet-api/.env`)
-
-```bash
-cat > ~/.openclaw/tesla-fleet-api/.env <<'EOF'
-TESLA_CLIENT_ID=YOUR_CLIENT_ID
-TESLA_CLIENT_SECRET=YOUR_CLIENT_SECRET
-EOF
-chmod 600 ~/.openclaw/tesla-fleet-api/.env
-```
-
-Optional overrides you *can* also set in `.env`:
-- `TESLA_AUDIENCE` (defaults to EU)
-- `TESLA_REDIRECT_URI` (default: `http://localhost:18080/callback`)
-- `TESLA_DOMAIN`
-- `TESLA_BASE_URL`
-- `TESLA_CA_CERT`
-- `TESLA_PRIVATE_KEY` (path to your Tesla ECDSA private key used for signed commands via the local proxy)
-
----
-
-## 4) Configure non-secret settings (optional)
+## 2) Configure provider credentials
 
 ```bash
 python3 scripts/auth.py config set \
+  --client-id "YOUR_CLIENT_ID" \
+  --client-secret "YOUR_CLIENT_SECRET" \
   --redirect-uri "http://localhost:18080/callback" \
   --audience "https://fleet-api.prd.eu.vn.cloud.tesla.com"
 ```
 
+This writes to `{workspace}/tesla-fleet-api/config.json`.
+
 ---
 
-## 5) OAuth login (creates auth.json)
+## 3) OAuth login (creates auth.json)
 
 Interactive login (manual code paste):
 
@@ -110,7 +80,7 @@ python3 scripts/tesla_oauth_local.py --prompt-missing-scopes
 
 ---
 
-## 6) Register domain + enroll virtual key
+## 4) Register domain + enroll virtual key
 
 ```bash
 python3 scripts/auth.py register --domain YOUR_DOMAIN.com
@@ -122,29 +92,67 @@ Then, on your phone (Tesla app installed):
 
 ---
 
-## 7) Start proxy + configure scripts to use it
+## 5) Proxy Setup (for signed commands only)
 
-Start the proxy:
+> **Note:** The proxy is only needed for **sending signed commands** to the vehicle (climate, locks, charging, honk, etc.). Reading vehicle data (battery, location, temperatures) works without the proxy — those requests go directly to the Tesla Fleet API.
+
+### Install tesla-http-proxy
 
 ```bash
-./scripts/start_proxy.sh ~/.openclaw/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem
+# Pin to a specific version for supply-chain safety
+go install github.com/teslamotors/vehicle-command/cmd/tesla-http-proxy@v0.4.1
 ```
 
-Configure the scripts to talk to the local proxy:
+This installs `tesla-http-proxy` to `~/go/bin/`. Override the version with `TESLA_VEHICLE_COMMAND_VERSION` only if you explicitly want a different one.
+
+### Generate TLS certificates
+
+```bash
+mkdir -p {workspace}/tesla-fleet-api/proxy
+cd {workspace}/tesla-fleet-api/proxy
+
+openssl req -x509 -newkey rsa:4096 \
+  -keyout tls-key.pem -out tls-cert.pem \
+  -days 365 -nodes -subj "/CN=localhost"
+
+chmod 600 tls-key.pem
+```
+
+### Start the proxy
+
+```bash
+~/go/bin/tesla-http-proxy \
+  -key-file {workspace}/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem \
+  -tls-key {workspace}/tesla-fleet-api/proxy/tls-key.pem \
+  -cert {workspace}/tesla-fleet-api/proxy/tls-cert.pem \
+  -host localhost \
+  -port 4443
+```
+
+### Configure scripts to use the proxy
 
 ```bash
 python3 scripts/auth.py config set \
   --base-url "https://localhost:4443" \
-  --ca-cert "$HOME/.openclaw/tesla-fleet-api/proxy/tls-cert.pem"
+  --ca-cert "proxy/tls-cert.pem"
 ```
+
+The `ca_cert` path is stored relative to the config directory and resolved at runtime.
+
+### Stop the proxy
+
+Just kill the process (`Ctrl+C` or `kill <pid>`).
 
 ---
 
-## 8) Test
+## 6) Test
 
 ```bash
+# Data (no proxy needed)
 python3 scripts/vehicles.py
 python3 scripts/vehicle_data.py -c
+
+# Commands (proxy required)
 python3 scripts/command.py honk
 ```
 
@@ -168,6 +176,21 @@ python3 scripts/command.py precondition add -t 08:00 -d weekdays --place home
 
 ---
 
+## Regional Base URLs
+
+| Region | Audience URL |
+|--------|--------------|
+| Europe | `https://fleet-api.prd.eu.vn.cloud.tesla.com` |
+| North America | `https://fleet-api.prd.na.vn.cloud.tesla.com` |
+| China | `https://fleet-api.prd.cn.vn.cloud.tesla.cn` |
+
+OAuth token endpoint (all regions):
+```
+https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token
+```
+
+---
+
 ## Troubleshooting
 
 - **Token expired (401):**
@@ -181,4 +204,4 @@ python3 scripts/command.py precondition add -t 08:00 -d weekdays --place home
   ```
 
 - **Command not signed / rejected:**
-  ensure proxy is running and `base_url` + `ca_cert` are configured.
+  Ensure the proxy is running and `base_url` + `ca_cert` are configured (step 5).
