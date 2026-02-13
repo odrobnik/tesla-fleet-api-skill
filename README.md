@@ -9,3 +9,8 @@ Control Tesla vehicles via Tesla’s official Fleet API.
 Links:
 - Tesla Fleet API docs: https://developer.tesla.com/docs/fleet-api
 - Vehicle Command SDK: https://github.com/teslamotors/vehicle-command
+
+## Documentation
+
+- [SKILL.md](SKILL.md) — agent-facing reference (commands, behavior, limitations)
+- [SETUP.md](SETUP.md) — prerequisites, configuration, and setup instructions
