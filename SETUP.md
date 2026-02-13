@@ -11,8 +11,9 @@ If you just want the CLI command reference, see `SKILL.md`.
 - Tesla Developer Account + an app created
 - A domain you control (for public key hosting + virtual key enrollment)
 - `python3`
+- `openssl` (for key generation + TLS certs)
 - macOS (scripts tested on macOS)
-- For proxy setup: `go` and `openssl` (on macOS: `brew install go`)
+- For proxy setup: `go` (on macOS: `brew install go`) — only needed once to compile the proxy binary
 
 ---
 
@@ -28,7 +29,7 @@ Files:
 - `vehicles.json` — cached vehicle list
 - `places.json` — named locations (`{"home": {"lat": ..., "lon": ...}}`)
 - `proxy/` — TLS material for the signing proxy
-- `*.tesla.private-key.pem` — your Tesla EC private key
+- `private-key.pem` — your Tesla EC private key (fixed name)
 
 Credentials come from `config.json` or environment variables (`TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`). No `.env` file loading.
 
@@ -45,8 +46,8 @@ openssl ec -in private-key.pem -pubout -out public-key.pem
 # https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem
 ```
 
-Store your private key in the workspace:
-`{workspace}/tesla-fleet-api/YOUR_DOMAIN.tesla.private-key.pem`
+Store your private key in the workspace with a fixed name:
+`{workspace}/tesla-fleet-api/private-key.pem`
 
 ---
 
@@ -98,12 +99,14 @@ Then, on your phone (Tesla app installed):
 
 ### Install tesla-http-proxy
 
+Requires Go (`brew install go` on macOS).
+
 ```bash
 # Pin to a specific version for supply-chain safety
 go install github.com/teslamotors/vehicle-command/cmd/tesla-http-proxy@v0.4.1
 ```
 
-This installs `tesla-http-proxy` to `~/go/bin/`. Override the version with `TESLA_VEHICLE_COMMAND_VERSION` only if you explicitly want a different one.
+This installs `tesla-http-proxy` to `~/go/bin/`.
 
 ### Generate TLS certificates
 
@@ -133,9 +136,8 @@ The `ca_cert` path is stored relative to the config directory and resolved at ru
 Use the convenience scripts:
 
 ```bash
-# Start (auto-detects private key in workspace, or pass path explicitly)
+# Start (uses {workspace}/tesla-fleet-api/private-key.pem)
 ./scripts/start_proxy.sh
-./scripts/start_proxy.sh /path/to/private-key.pem
 
 # Stop
 ./scripts/stop_proxy.sh

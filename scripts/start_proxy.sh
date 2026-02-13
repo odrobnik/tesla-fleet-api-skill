@@ -8,29 +8,35 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # --- Resolve workspace ---
-if [ -n "$OPENCLAW_WORKSPACE" ]; then
-    WORKSPACE="$OPENCLAW_WORKSPACE"
-else
-    WORKSPACE="$(cd "$SCRIPT_DIR" && while [ "$PWD" != "/" ]; do
-        [ -d skills ] && echo "$PWD" && break; cd ..; done)"
-    [ -z "$WORKSPACE" ] && WORKSPACE="$HOME/clawd"
-fi
+WORKSPACE="$(cd "$SCRIPT_DIR" && while [ "$PWD" != "/" ]; do
+    [ -d skills ] && echo "$PWD" && break; cd ..; done)"
+[ -z "$WORKSPACE" ] && WORKSPACE="$HOME/clawd"
 
-PROXY_DIR="${WORKSPACE}/tesla-fleet-api/proxy"
+DATA_DIR="${WORKSPACE}/tesla-fleet-api"
+PROXY_DIR="${DATA_DIR}/proxy"
 GO_BIN="${GOPATH:-$HOME/go}/bin"
 PROXY_BIN="${GO_BIN}/tesla-http-proxy"
 PID_FILE="${PROXY_DIR}/proxy.pid"
 LOG_FILE="${PROXY_DIR}/proxy.log"
+PRIVATE_KEY="${DATA_DIR}/private-key.pem"
 
 # --- Check binary exists ---
 if [ ! -f "${PROXY_BIN}" ]; then
     echo "Error: tesla-http-proxy not found at ${PROXY_BIN}" >&2
     echo "" >&2
-    echo "Install it by following the Proxy Setup section in:" >&2
+    echo "See the Proxy Setup section in:" >&2
     echo "  ${SKILL_DIR}/SETUP.md" >&2
+    exit 1
+fi
+
+# --- Check private key exists ---
+if [ ! -f "${PRIVATE_KEY}" ]; then
+    echo "Error: Tesla private key not found at ${PRIVATE_KEY}" >&2
     echo "" >&2
-    echo "Quick version:" >&2
-    echo "  go install github.com/teslamotors/vehicle-command/cmd/tesla-http-proxy@v0.4.1" >&2
+    echo "Place your EC private key at:" >&2
+    echo "  ${PRIVATE_KEY}" >&2
+    echo "" >&2
+    echo "See SETUP.md for key generation instructions." >&2
     exit 1
 fi
 
@@ -44,23 +50,6 @@ if [ ! -f "${PROXY_DIR}/tls-cert.pem" ] || [ ! -f "${PROXY_DIR}/tls-key.pem" ]; 
         -days 365 -nodes -subj "/CN=localhost" > /dev/null 2>&1
     chmod 600 "${PROXY_DIR}/tls-key.pem"
     echo "✓ Generated TLS certificates in ${PROXY_DIR}"
-fi
-
-# --- Resolve private key ---
-if [ -n "$1" ]; then
-    PRIVATE_KEY="$1"
-elif [ -n "$TESLA_PRIVATE_KEY" ]; then
-    PRIVATE_KEY="$TESLA_PRIVATE_KEY"
-else
-    # Auto-detect *.tesla.private-key.pem in workspace
-    PRIVATE_KEY="$(find "${WORKSPACE}/tesla-fleet-api" -maxdepth 1 -name '*.tesla.private-key.pem' | head -1)"
-fi
-
-if [ -z "${PRIVATE_KEY}" ] || [ ! -f "${PRIVATE_KEY}" ]; then
-    echo "Error: Tesla private key not found." >&2
-    echo "Usage: $0 [path-to-private-key.pem]" >&2
-    echo "Or set TESLA_PRIVATE_KEY env var." >&2
-    exit 1
 fi
 
 # --- Check if already running ---
